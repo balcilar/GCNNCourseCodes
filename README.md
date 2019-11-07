@@ -1,6 +1,6 @@
 # GCNN Course Codes
 
-This repository is the supplementary material for Graph based Machine Learning Course in University of Rouen Normandy, at LITIS Lab. 
+This repository is the supplementary material for Graph Analysis Course in University of Rouen Normandy, at LITIS Lab. 
 
 We are tackling with Multi-Graph graph classification problem. ENZYMES dataset consist of 600 graphs, needs to be classified into 6 group. The dataset is balanced. So we have 100 graph for each class. Although in original dataset, the nodes have 18 extra continious features in addition to three lenght one-hot coding node types, we do not use those continious features in that project in order to measure performance under using just node labels.
 
