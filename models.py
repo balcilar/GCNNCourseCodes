@@ -186,15 +186,16 @@ class GCN(Model):
 
 
 
-class GCN_Model(Model):
-    def __init__(self, placeholders, input_dim, agg='mean', sparse_sup=False, **kwargs):
-        super(GCN_Model, self).__init__(**kwargs)
+class GCNN(Model):
+    def __init__(self, placeholders, input_dim, agg='mean', nkernel=1,sparse_sup=False, **kwargs):
+        super(GCNN, self).__init__(**kwargs)
 
         self.inputs = placeholders['features']
         self.input_dim = input_dim        
         self.output_dim = placeholders['labels'].get_shape().as_list()[1]
         self.placeholders = placeholders
         self.sparse_sup=sparse_sup
+        self.nkernel=nkernel
         self.optimizer = tf.train.AdamOptimizer(learning_rate=FLAGS.learning_rate)
         self.agg=agg
         self.build()
@@ -234,6 +235,7 @@ class GCN_Model(Model):
                                             output_dim=FLAGS.hidden1,
                                             placeholders=self.placeholders,
                                             act=tf.nn.relu,
+                                            nkernel=self.nkernel,
                                             bias=False,
                                             dropout=True,
                                             sparse_inputs=False,
@@ -244,6 +246,97 @@ class GCN_Model(Model):
                                             output_dim=FLAGS.hidden2,
                                             placeholders=self.placeholders,
                                             act=tf.nn.relu,
+                                            nkernel=self.nkernel,
+                                            bias=False,
+                                            dropout=True,
+                                            sparse_inputs=False,
+                                            sparse_sup=self.sparse_sup,
+                                            logging=self.logging))         
+
+        self.layers.append(AggLayer(method=self.agg,placeholders=self.placeholders))
+
+        self.layers.append(Dense(input_dim=FLAGS.hidden2,
+                                 output_dim=FLAGS.dense,
+                                 placeholders=self.placeholders,
+                                 act=tf.nn.relu, 
+                                 dropout=True,
+                                 bias=True,
+                                 logging=self.logging)) 
+
+        self.layers.append(Dense(input_dim=FLAGS.dense,
+                                 output_dim=self.output_dim,
+                                 placeholders=self.placeholders,
+                                 act=lambda x: x,
+                                 bias=True,
+                                 dropout=False,
+                                 logging=self.logging))       
+
+    def predict(self):
+        return tf.nn.softmax(self.outputs)
+
+
+
+class DSGCNN(Model):
+    def __init__(self, placeholders, input_dim, agg='mean', nkernel=1,sparse_sup=False, **kwargs):
+        super(DSGCNN, self).__init__(**kwargs)
+
+        self.inputs = placeholders['features']
+        self.input_dim = input_dim        
+        self.output_dim = placeholders['labels'].get_shape().as_list()[1]
+        self.placeholders = placeholders
+        self.sparse_sup=sparse_sup
+        self.nkernel=nkernel
+        self.optimizer = tf.train.AdamOptimizer(learning_rate=FLAGS.learning_rate)
+        self.agg=agg
+        self.build()
+
+    def _loss(self):
+        # Weight decay loss
+        tmp=FLAGS.weight_decay
+        for var in self.layers[0].vars.values():            
+            self.loss += tmp * tf.nn.l2_loss(var)  
+
+        for var in self.layers[1].vars.values():            
+            self.loss += tmp * tf.nn.l2_loss(var)           
+
+        tmp=FLAGS.weight_decay
+        for var in self.layers[2].vars.values():
+            self.loss += tmp * tf.nn.l2_loss(var)
+            break        
+
+        tmp=FLAGS.weight_decay
+        for var in self.layers[3].vars.values():
+            self.loss += tmp * tf.nn.l2_loss(var)
+            break              
+
+        # Cross entropy error
+        self.loss += softmax_cross_entropy(self.outputs, self.placeholders['labels'])
+                                                   
+    def _entropy(self):
+        self.entropy= softmax_cross_entropy(self.outputs, self.placeholders['labels'])
+                                                  
+
+    def _accuracy(self):
+        self.accuracy = inductive_multiaccuracy(self.outputs, self.placeholders['labels'])
+
+    def _build(self):
+
+        self.layers.append(GraphConvolutionBatchDephSep(input_dim=self.input_dim,
+                                            output_dim=FLAGS.hidden1,
+                                            placeholders=self.placeholders,
+                                            act=tf.nn.relu,
+                                            nkernel=self.nkernel,
+                                            bias=False,
+                                            dropout=True,
+                                            sparse_inputs=False,
+                                            sparse_sup=self.sparse_sup,
+                                            logging=self.logging))
+                                            
+        self.layers.append(GraphConvolutionBatchDephSep(input_dim=FLAGS.hidden1,
+                                            output_dim=FLAGS.hidden2,
+                                            placeholders=self.placeholders,
+                                            act=tf.nn.relu,
+                                            nkernel=self.nkernel,
                                             bias=False,
                                             dropout=True,
                                             sparse_inputs=False,

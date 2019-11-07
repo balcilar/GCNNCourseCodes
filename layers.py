@@ -193,7 +193,7 @@ class GraphConvolution(Layer):
 class GraphConvolutionBatch(Layer):
     """Graph convolution layer."""
     def __init__(self, input_dim, output_dim, placeholders, dropout=0.,
-                 sparse_inputs=False, act=tf.nn.relu, bias=False,sparse_sup=False,
+                 sparse_inputs=False, act=tf.nn.relu, bias=False,sparse_sup=False,nkernel=1,
                  featureless=False, **kwargs):
         super(GraphConvolutionBatch, self).__init__(**kwargs)
 
@@ -207,11 +207,13 @@ class GraphConvolutionBatch(Layer):
         self.sparse_inputs = sparse_inputs
         self.featureless = featureless
         self.bias = bias
+        self.nkernel=nkernel
         self.sparse_sup=sparse_sup        
 
         with tf.variable_scope(self.name + '_vars'):
-            i=0
-            self.vars['weights_' + str(i)] = glorot([input_dim, output_dim],name='weights_' + str(i))
+            for i in range(0,self.nkernel):
+                self.vars['weights_' + str(i)] = glorot([input_dim, output_dim],name='weights_' + str(i))
+
             if self.bias:
                 self.vars['bias'] = zeros([output_dim], name='bias')
 
@@ -224,9 +226,13 @@ class GraphConvolutionBatch(Layer):
         # dropout
         x = tf.nn.dropout(x, 1-self.dropout)
 
+        supports = list()
         # convolve
-        s0=tf.matmul(self.support,x)
-        output=tf.tensordot(s0,self.vars['weights_' + str(0)],[2, 0])
+        for i in range(0,self.nkernel):
+            s0=tf.matmul(self.support[:,i,:,:],x)
+            output=tf.tensordot(s0,self.vars['weights_' + str(i)],[2, 0])
+            supports.append(output)
+        output = tf.add_n(supports)
         
         # bias
         if self.bias:
@@ -237,6 +243,68 @@ class GraphConvolutionBatch(Layer):
         self.out=out
         return out
 
+
+class GraphConvolutionBatchDephSep(Layer):
+    """Graph convolution layer."""
+    def __init__(self, input_dim, output_dim, placeholders, dropout=0.,
+                 sparse_inputs=False, act=tf.nn.relu, bias=False,sparse_sup=False,nkernel=1,
+                 featureless=False, **kwargs):
+        super(GraphConvolutionBatchDephSep, self).__init__(**kwargs)
+
+        if dropout:
+            self.dropout = placeholders['dropout']
+        else:
+            self.dropout = 0.
+
+        self.act = act
+        self.support = placeholders['support']        
+        self.sparse_inputs = sparse_inputs
+        self.featureless = featureless
+        self.bias = bias
+        self.nkernel=nkernel
+        self.sparse_sup=sparse_sup        
+
+        with tf.variable_scope(self.name + '_vars'):
+            i=0
+            self.vars['weights_' + str(i)] = glorot([input_dim, output_dim],name='weights_' + str(i))
+
+            for i in range(0,self.nkernel):
+                self.vars['sdweight_' + str(i)] = zeros([input_dim],name='sdweight_' + str(i))  
+
+            if self.bias:
+                self.vars['bias'] = zeros([output_dim], name='bias')
+
+        if self.logging:
+            self._log_vars()
+
+    def _call(self, inputs):
+        x = inputs
+
+        # dropout
+        x = tf.nn.dropout(x, 1-self.dropout)
+
+        supports = list()
+        # convolve
+        s0=tf.matmul(self.support[:,0,:,:],x)  
+        s0=s0*(1+self.vars['sdweight_'+str(0)])
+        supports.append(s0)
+
+        for i in range(1,self.nkernel):
+            s0=tf.matmul(self.support[:,i,:,:],x)  
+            s0=s0*(self.vars['sdweight_'+str(i)])
+            supports.append(s0)
+
+        output = tf.add_n(supports)
+        output=tf.tensordot(output,self.vars['weights_' + str(0)],[2, 0])
+        
+        # bias
+        if self.bias:
+            output += self.vars['bias']
+
+        #output=tf.nn.l2_normalize(output,axis=1)
+        out=self.act(output)
+        self.out=out
+        return out
 
 
 

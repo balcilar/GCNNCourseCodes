@@ -5,7 +5,7 @@ import time
 import tensorflow as tf
 
 from utils import *
-from models import GCN_Model
+from models import GCNN
 from tensorflow import set_random_seed
 import matplotlib.pyplot as plt
 import scipy.io as sio
@@ -36,7 +36,11 @@ flags.DEFINE_integer('hidden2', 100, 'Number of units in hidden graph conv layer
 flags.DEFINE_integer('dense', 100, 'Number of units in hidden dense layer.')  
 flags.DEFINE_float('dropout', 0.10, 'Dropout rate (1 - keep probability).')   
 flags.DEFINE_float('weight_decay', 0.0, 'Weight for L2 loss on embedding matrix.') 
+flags.DEFINE_integer('nkernel', 3, 'number of kernels')
 
+
+
+nkernel=flags.FLAGS.nkernel
 # how many times do you want to update parameters over one epoch. batchsize=trainsize/bsize
 bsize=3
 
@@ -66,11 +70,11 @@ ND=np.zeros((len(A),1))
 FF=np.zeros((len(A),nmax,3))
 # one-hot coding output matrix 
 YY=np.zeros((len(A),6))
-# Convolution matrix
-SP1=np.zeros((len(A),nmax,nmax))
+# Convolution kernels, supports
+SP=np.zeros((len(A),nkernel,nmax,nmax))
 
 
-# prepare inputs outputs convolution supports for each graph
+# prepare inputs, outputs, convolution kernels for each graph
 for i in range(0,len(A)):  
     # number of node in graph
     n=F[i].shape[0]
@@ -82,16 +86,22 @@ for i in range(0,len(A)):
     # one-hot coding output matrix
     YY[i,Y[i]]=1
 
-    # GCN convolution kernel
-    gcn= (normalize_adj(A[i] + sp.eye(A[i].shape[0]))).toarray()    
+    # set kernels
+    chebnet = chebyshev_polynomials(A[i], nkernel-1)
+    for j in range(0,nkernel):
+        SP[i,j,0:n,0:n]=chebnet[j].toarray() 
 
-    # MLP convolution kernel
-    mlp=np.eye(n)
+    ## GCN convolution kernel
+    #gcn= (normalize_adj(A[i] + sp.eye(A[i].shape[0]))).toarray()    
+    #SP[i,0,0:n,0:n]=gcn
 
-    # set gcn or mlp kernel to the support matrix
-    SP1[i,0:n,0:n]= gcn  #mlp
-      
+    ## MLP convolution kernel
+    #mlp=np.eye(n)
+    #SP[i,0,0:n,0:n]=gcn
 
+    ## A and I convolution kernel
+    # SP[i,0,0:n,0:n]=np.eye(n)
+    # SP[i,1,0:n,0:n]=A[i]
 
 NB=np.zeros((FLAGS.epochs,10))
 
@@ -103,14 +113,14 @@ for fold in range(0,10):
     tsid=TSid[fold]
     
     placeholders = {        
-            'support': tf.placeholder(tf.float32, shape=(None,nmax,nmax)),            
+            'support': tf.placeholder(tf.float32, shape=(None,nkernel,nmax,nmax)),            
             'features': tf.placeholder(tf.float32, shape=(None,nmax, FF.shape[2])),
             'labels': tf.placeholder(tf.float32, shape=(None, 6)),  
             'nnodes': tf.placeholder(tf.float32, shape=(None, 1)),               
             'dropout': tf.placeholder_with_default(0., shape=()),        
     }
 
-    model = GCN_Model(placeholders, input_dim=FF.shape[2], logging=True,agg='mean')  
+    model = GCNN(placeholders, input_dim=FF.shape[2],nkernel=nkernel,logging=True,agg='mean')  
 
     sess = tf.Session()
     sess.run(tf.global_variables_initializer())
@@ -119,7 +129,7 @@ for fold in range(0,10):
     feed_dict = dict()
     feed_dict.update({placeholders['labels']: YY[trid,:]})    
     feed_dict.update({placeholders['features']: FF[trid,:,:]})
-    feed_dict.update({placeholders['support']: SP1[trid,:,:]}) 
+    feed_dict.update({placeholders['support']: SP[trid,:,:,:]}) 
     feed_dict.update({placeholders['nnodes']: ND[trid,]})    
     feed_dict.update({placeholders['dropout']: FLAGS.dropout})
 
@@ -127,7 +137,7 @@ for fold in range(0,10):
     feed_dictT = dict()
     feed_dictT.update({placeholders['labels']: YY[tsid,:]})    
     feed_dictT.update({placeholders['features']: FF[tsid,:,:]})
-    feed_dictT.update({placeholders['support']: SP1[tsid,:,:]})    
+    feed_dictT.update({placeholders['support']: SP[tsid,:,:,:]})    
     feed_dictT.update({placeholders['nnodes']: ND[tsid,]})     
     feed_dictT.update({placeholders['dropout']: 0})        
     
@@ -141,7 +151,7 @@ for fold in range(0,10):
             bid=trid[int(ind[i]):int(ind[i+1])]
             feed_dictB.update({placeholders['labels']: YY[bid,:]})    
             feed_dictB.update({placeholders['features']: FF[bid,:,:]})
-            feed_dictB.update({placeholders['support']: SP1[bid,:,:]})            
+            feed_dictB.update({placeholders['support']: SP[bid,:,:,:]})            
             feed_dictB.update({placeholders['nnodes']: ND[bid,]})            
             feed_dictB.update({placeholders['dropout']: FLAGS.dropout})
             # train for batch data

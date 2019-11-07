@@ -168,7 +168,7 @@ def construct_feed_dict(features, support, labels, labels_mask, placeholders):
 
 def chebyshev_polynomials(adj, k):
     """Calculate Chebyshev polynomials up to order k. Return a list of sparse matrices (tuple representation)."""
-    print("Calculating Chebyshev polynomials up to order {}...".format(k))
+    #print("Calculating Chebyshev polynomials up to order {}...".format(k))
 
     adj_normalized = normalize_adj(adj)
     laplacian = sp.eye(adj.shape[0]) - adj_normalized
@@ -186,4 +186,4 @@ def chebyshev_polynomials(adj, k):
     for i in range(2, k+1):
         t_k.append(chebyshev_recurrence(t_k[-1], t_k[-2], scaled_laplacian))
 
-    return sparse_to_tuple(t_k)
+    return t_k
