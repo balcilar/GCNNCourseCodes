@@ -17,4 +17,7 @@ Another is demo for Depthwise Separable Graph Convolution, which can be run by
 ```
 python enzymes_DSGCNN.py
 ```
-All models use the same architecture, which has 3 neuron in inpput layer, 320 and 100 for graph convolution layers which followed by mean aggragetor layer, then 100 neurons fully connected layer and finally fully connected output layer which has 6 neurons as the same number of classes. We used RELU activation for all layer expect softmax in the last layer. Cross entropy is the used loss function. We applied dropout for all layer except last layer as well. We do not use any regularization in addition to cross entropy loss.
+All models use the same architecture, which has 3 neuron in inpput layer, 320 and 100 for graph convolution layers which followed by mean aggragetor layer, then 100 neurons fully connected layer and finally fully connected output layer which has 6 neurons as the same number of classes. We used RELU activation for all layer expect softmax in the last layer. Cross entropy is the used loss function. We applied dropout for all layer except last layer as well. We do not use any regularization in addition to cross entropy loss. Here is the architecture
+
+
+![Alt Text](architecture.jpg)
